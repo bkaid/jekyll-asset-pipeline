@@ -101,6 +101,7 @@ module JekyllAssetPipeline
       bundle if @options['bundle']
       compress if @options['compress']
       gzip if @options['gzip']
+      hashit
       save
       markup
     end
@@ -159,8 +160,7 @@ module JekyllAssetPipeline
         a.content
       end.join("\n")
 
-      hash = JekyllAssetPipeline::Pipeline.hash(@source, @manifest, @options)
-      @assets = [JekyllAssetPipeline::Asset.new(content, "#{@prefix}-#{hash}#{@type}")]
+      @assets = [JekyllAssetPipeline::Asset.new(content, "#{@prefix}#{@type}")]
     end
 
     # Compress assets if compressor is defined
@@ -190,18 +190,27 @@ module JekyllAssetPipeline
       end.flatten!
     end
 
+    # Update the asset file name to include a hash of the contents.
+    def hashit
+      @assets.each do |asset|
+        # Find a hasher to use or use the default
+        klass = JekyllAssetPipeline::Hasher.subclasses.first || JekyllAssetPipeline::Hasher
+        klass.new(@prefix, @type, asset).hash()
+      end
+    end
+
     # Save assets to file
     def save
       output_path = @options['output_path']
       staging_path = @options['staging_path']
 
       @assets.each do |asset|
-        directory = File.join(@source, staging_path, output_path)
+        directory = File.join(@source, staging_path, output_path, File.dirname(asset.filename))
         FileUtils::mkpath(directory) unless File.directory?(directory)
 
         begin
           # Save file to disk
-          File.open(File.join(directory, asset.filename), 'w') do |file|
+          File.open(File.join(directory, File.basename(asset.filename)), 'w') do |file|
             file.write(asset.content)
           end
         rescue Exception => e
